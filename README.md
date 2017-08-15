@@ -50,3 +50,10 @@ Finally initialize the build host, using:
 make install
 ```
 
+This will configure the host, install build prerequisites, checkout or update gluon, checkout or update the site config, and build the images with the target defined in _gluon_target_.
+
+
+## Configuration
+
+The default values for the build are defined in _defaults/main.yml_, and can be overrided by adding variables in _vars/main.yml_ (the placeholders are
+already commented out - just uncomment them and fill in values).

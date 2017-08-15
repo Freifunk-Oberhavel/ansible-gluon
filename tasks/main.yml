@@ -1,0 +1,13 @@
+---
+
+# build Freifunk gluon images
+
+
+# fail if it's not a Debian system
+- name: Check OS (freifunk-build - main)
+  fail: msg="Not a Debian system!"
+  when: ansible_distribution != 'Debian'
+
+
+- name: Installation for Debian
+  include: debian.yml

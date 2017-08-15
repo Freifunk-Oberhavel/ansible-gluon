@@ -1,0 +1,89 @@
+---
+
+# build Freifunk gluon images
+
+
+# fail if it's not a Debian system
+- name: Check OS (freifunk-build)
+  fail: msg="Not a Debian based system!"
+  when: ansible_distribution != 'Debian'
+
+
+- name: Basic packages
+  apt: name={{ item }} state=present
+  with_items:
+    - git
+    - subversion
+    - python
+    - build-essential
+    - gawk
+    - unzip
+    - zip
+    - libncurses5-dev
+    - zlib1g-dev
+    - libssl-dev
+
+
+- name: Detect if gluon is already checked out
+  stat: path=/home/{{ ansible_ssh_user }}/gluon-{{ gluon_version }}
+  register: gluon_checked_out
+
+
+- name: Check out gluon
+  become: false
+  shell:
+    cmd: git clone {{ gluon_source }}.git gluon-{{ gluon_version }} -b {{ gluon_version }}
+    creates: /home/{{ ansible_ssh_user }}/gluon-{{ gluon_version }}
+    chdir: /home/{{ ansible_ssh_user }}
+  when: gluon_checked_out.stat.exists != True
+
+
+- name: Update gluon
+  become: false
+  shell:
+    cmd: git pull origin {{ gluon_version }}
+    chdir: /home/{{ ansible_ssh_user }}/gluon-{{ gluon_version }}
+  when: gluon_checked_out.stat.exists == True
+
+
+- name: Detect if site config is already checked out
+  stat: path=/home/{{ ansible_ssh_user }}/gluon-{{ gluon_version }}/site
+  register: site_config_checked_out
+
+
+- name: Retrieve site config
+  become: false
+  shell:
+    cmd: git clone {{ site_config }}.git site
+    creates: /home/{{ ansible_ssh_user }}/gluon-{{ gluon_version }}/site
+    chdir: /home/{{ ansible_ssh_user }}/gluon-{{ gluon_version }}
+  when: site_config_checked_out.stat.exists != True
+
+
+- name: Update site config
+  become: false
+  shell:
+    cmd: git pull
+    chdir: /home/{{ ansible_ssh_user }}/gluon-{{ gluon_version }}/site
+  when: site_config_checked_out.stat.exists == True
+
+
+- name: Run 'make update'
+  become: false
+  shell:
+    cmd: make update
+    chdir: /home/{{ ansible_ssh_user }}/gluon-{{ gluon_version }}
+
+
+- name: Runtime notification
+  debug: msg="The next step will take a long time"
+
+
+- name: Run 'make'
+  become: false
+  shell:
+    cmd: make GLUON_TARGET={{ gluon_target }}
+    chdir: /home/{{ ansible_ssh_user }}/gluon-{{ gluon_version }}
+
+
+- meta: flush_handlers
