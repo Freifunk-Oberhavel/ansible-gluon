@@ -9,6 +9,75 @@
   when: ansible_distribution != 'Debian'
 
 
+# Figure out if in container (as root) or not
+# set home path, create user, set user
+
+# when this runs in a container, it most likely runs as root
+# in this case, create a user and use this one
+
+
+
+- name: Set build user (root)
+  set_fact:
+    gluon_build_user: "{{ gluon_unix_user }}"
+    gluon_user_root: true
+  when: ansible_user_id == "root"
+
+
+- name: Set build user (non-root)
+  set_fact:
+    gluon_build_user: "{{ ansible_user_id }}"
+    gluon_user_root: false
+  when: ansible_user_id != "root"
+
+
+- block:
+
+  - name: Create group
+    group:
+      name: "{{ gluon_build_user }}"
+      state: present
+      system: no
+
+
+  - name: Create user
+    user:
+      name: "{{ gluon_build_user }}"
+      comment: "gluon build user"
+      shell: /bin/bash
+      group: "{{ gluon_build_user }}"
+      createhome: yes
+      generate_ssh_key: yes
+      state: present
+      system: no
+  when: gluon_user_root == True
+
+
+- name: Get user home directory
+  getent:
+    database: passwd
+    key: "{{ gluon_build_user }}"
+    split: ':'
+
+
+- name: Set user home directory
+  set_fact:
+    gluon_build_home: "{{ getent_passwd[gluon_build_user][4] }}"
+
+
+- name: Home
+  debug:
+    msg: "{{ gluon_build_home }}"
+
+
+
+
+
+#- name: Stop
+#  fail: msg="Stop"
+
+
+
 - name: Basic packages
   apt: name={{ item }} state=present
   with_items:
@@ -22,68 +91,92 @@
     - libncurses5-dev
     - zlib1g-dev
     - libssl-dev
+    - sudo
 
 
 - name: Detect if gluon is already checked out
-  stat: path=/home/{{ ansible_ssh_user }}/gluon-{{ gluon_version }}
+  stat: path={{ gluon_build_home }}/gluon-{{ gluon_version }}
   register: gluon_checked_out
 
 
 - name: Check out gluon
-  become: false
+  become: true
+  become_user: "{{ gluon_build_user }}"
   shell:
     cmd: git clone {{ gluon_source }}.git gluon-{{ gluon_version }} -b {{ gluon_version }}
-    creates: /home/{{ ansible_ssh_user }}/gluon-{{ gluon_version }}
-    chdir: /home/{{ ansible_ssh_user }}
+    creates: "{{ gluon_build_home }}/gluon-{{ gluon_version }}"
+    chdir: "{{ gluon_build_home }}"
   when: gluon_checked_out.stat.exists != True
 
 
 - name: Update gluon
-  become: false
+  become: true
+  become_user: "{{ gluon_build_user }}"
   shell:
     cmd: git pull origin {{ gluon_version }}
-    chdir: /home/{{ ansible_ssh_user }}/gluon-{{ gluon_version }}
+    chdir: "{{ gluon_build_home }}/gluon-{{ gluon_version }}"
   when: gluon_checked_out.stat.exists == True
 
 
 - name: Detect if site config is already checked out
-  stat: path=/home/{{ ansible_ssh_user }}/gluon-{{ gluon_version }}/site
+  stat: path={{ gluon_build_home }}/gluon-{{ gluon_version }}/site
   register: site_config_checked_out
 
 
 - name: Retrieve site config
-  become: false
+  become: true
+  become_user: "{{ gluon_build_user }}"
   shell:
     cmd: git clone {{ site_config }}.git site
-    creates: /home/{{ ansible_ssh_user }}/gluon-{{ gluon_version }}/site
-    chdir: /home/{{ ansible_ssh_user }}/gluon-{{ gluon_version }}
+    creates: "{{ gluon_build_home }}/gluon-{{ gluon_version }}/site"
+    chdir: "{{ gluon_build_home }}/gluon-{{ gluon_version }}"
   when: site_config_checked_out.stat.exists != True
 
 
 - name: Update site config
-  become: false
+  become: true
+  become_user: "{{ gluon_build_user }}"
   shell:
     cmd: git pull
-    chdir: /home/{{ ansible_ssh_user }}/gluon-{{ gluon_version }}/site
+    chdir: "{{ gluon_build_home }}/gluon-{{ gluon_version }}/site"
   when: site_config_checked_out.stat.exists == True
 
 
 - name: Run 'make update'
-  become: false
+  become: true
+  become_user: "{{ gluon_build_user }}"
   shell:
     cmd: make update
-    chdir: /home/{{ ansible_ssh_user }}/gluon-{{ gluon_version }}
+    chdir: "{{ gluon_build_home }}/gluon-{{ gluon_version }}"
 
 
-- name: Runtime notification
-  debug: msg="The next step will take a long time"
+- name: check if output files from previous builds exist
+  stat: path={{ gluon_build_home }}/build-gluon-log.txt
+  register: build_gluon_log
 
 
-- name: Run 'make'
-  become: false
-  shell:
-    cmd: make GLUON_TARGET={{ gluon_target }}
-    chdir: /home/{{ ansible_ssh_user }}/gluon-{{ gluon_version }}
+- block:
+  - name: Runtime notification
+    debug: msg="The next step will take a long time, the log will be in {{ gluon_build_home }}/build-gluon-log.txt"
+
+
+  - name: Run 'make'
+    become: true
+    become_user: "{{ gluon_build_user }}"
+    shell:
+      cmd: screen -S gluon -d -m /bin/bash -c "make GLUON_TARGET={{ gluon_target }} > {{ gluon_build_home }}/build-gluon-log.txt 2>&1"
+      chdir: "{{ gluon_build_home }}/gluon-{{ gluon_version }}"
+
+  when: build_gluon_log.stat.exists != True
+
+
+- name: Build already exists
+  fail: msg="Output file from previous build exists! ({{ gluon_build_home }}/build-gluon-log.txt)"
+  when: build_gluon_log.stat.exists == True
+
+
+
+
 
 
 - meta: flush_handlers
