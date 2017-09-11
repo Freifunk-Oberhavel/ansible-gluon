@@ -9,48 +9,33 @@
   when: ansible_distribution != 'Debian'
 
 
-# Figure out if in container (as root) or not
-# set home path, create user, set user
-
-# when this runs in a container, it most likely runs as root
-# in this case, create a user and use this one
-
-
-
-- name: Set build user (root)
+- name: Set build user
   set_fact:
     gluon_build_user: "{{ gluon_unix_user }}"
-    gluon_user_root: true
-  when: ansible_user_id == "root"
 
 
-- name: Set build user (non-root)
-  set_fact:
-    gluon_build_user: "{{ ansible_user_id }}"
-    gluon_user_root: false
-  when: ansible_user_id != "root"
+- name: Build user
+  debug:
+    msg: "Build user{{':'}} {{ gluon_build_user }}"
 
 
-- block:
-
-  - name: Create group
-    group:
-      name: "{{ gluon_build_user }}"
-      state: present
-      system: no
+- name: Create group
+  group:
+    name: "{{ gluon_build_user }}"
+    state: present
+    system: no
 
 
-  - name: Create user
-    user:
-      name: "{{ gluon_build_user }}"
-      comment: "gluon build user"
-      shell: /bin/bash
-      group: "{{ gluon_build_user }}"
-      createhome: yes
-      generate_ssh_key: yes
-      state: present
-      system: no
-  when: gluon_user_root == True
+- name: Create user
+  user:
+    name: "{{ gluon_build_user }}"
+    comment: "gluon build user"
+    shell: /bin/bash
+    group: "{{ gluon_build_user }}"
+    createhome: yes
+    generate_ssh_key: yes
+    state: present
+    system: no
 
 
 - name: Get user home directory
@@ -67,7 +52,7 @@
 
 - name: Home
   debug:
-    msg: "{{ gluon_build_home }}"
+    msg: "Build home{{':'}} {{ gluon_build_home }}"
 
 
 
@@ -92,6 +77,9 @@
     - zlib1g-dev
     - libssl-dev
     - sudo
+    - ca-certificates
+    - ntpdate
+    - ntp
 
 
 - name: Detect if gluon is already checked out

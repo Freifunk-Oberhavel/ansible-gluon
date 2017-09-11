@@ -7,5 +7,5 @@ gluon_source: https://github.com/freifunk-gluon/gluon
 gluon_target: ar71xx-generic
 site_config: https://github.com/Freifunk-Oberhavel/site-ff-oberhavel
 
-# will only be used when Ansible Playbook runs as root
+# Unix user for building images
 gluon_unix_user: gluon
