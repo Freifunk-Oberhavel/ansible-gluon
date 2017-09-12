@@ -141,6 +141,7 @@
 - name: check if output files from previous builds exist
   stat: path={{ gluon_build_home }}/build-gluon-log.txt
   register: build_gluon_log
+  changed_when: False
 
 
 - block:
